@@ -77,7 +77,11 @@ class Client(object):
     AGG_BUYER_MAKES = 'm'
     AGG_BEST_MATCH = 'M'
 
-    def __init__(self, api_key=None, api_secret=None, requests_params=None):
+    def __init__(self,
+                 api_key=None,
+                 api_secret=None,
+                 requests_params=None,
+                 tld='com'):
         """Binance API Client constructor
 
         :param api_key: Api Key
@@ -88,6 +92,12 @@ class Client(object):
         :type requests_params: dict.
 
         """
+
+        self.API_URL = self.API_URL.format(tld)
+        self.WITHDRAW_API_URL = self.WITHDRAW_API_URL.format(tld)
+        self.MARGIN_API_URL = self.MARGIN_API_URL.format(tld)
+        self.WEBSITE_URL = self.WEBSITE_URL.format(tld)
+        self.FUTURES_URL = self.FUTURES_URL.format(tld)
 
         self.API_KEY = api_key
         self.API_SECRET = api_secret
@@ -120,6 +130,9 @@ class Client(object):
 
     def _create_website_uri(self, path):
         return self.WEBSITE_URL + '/' + path
+
+    def _create_futures_api_uri(self, path):
+        return self.FUTURES_URL + '/' + self.FUTURES_API_VERSION + '/' + path
 
     def _generate_signature(self, data):
 
@@ -217,10 +230,14 @@ class Client(object):
         return self._request(method, uri, signed, **kwargs)
 
     def _request_website(self, method, path, signed=False, **kwargs):
-
         uri = self._create_website_uri(path)
 
         return self._request(method, uri, signed, **kwargs)
+
+    def _request_futures_api(self, method, path, signed=False, **kwargs):
+        uri = self._create_futures_api_uri(path)
+
+        return self._request(method, uri, signed, True, **kwargs)
 
     def _handle_response(self):
         """Internal helper for handling API responses from the Binance server.
@@ -244,7 +261,10 @@ class Client(object):
     def _put(self, path, signed=False, version=PUBLIC_API_VERSION, **kwargs):
         return self._request_api('put', path, signed, version, **kwargs)
 
-    def _delete(self, path, signed=False, version=PUBLIC_API_VERSION,
+    def _delete(self,
+                path,
+                signed=False,
+                version=PUBLIC_API_VERSION,
                 **kwargs):
         return self._request_api('delete', path, signed, version, **kwargs)
 
@@ -931,6 +951,27 @@ class Client(object):
             if idx % 3 == 0:
                 time.sleep(1)
 
+    def get_avg_price(self, **params):
+        """Current average price for a symbol.
+
+        https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#current-average-price
+
+        :param symbol:
+        :type symbol: str
+
+        :returns: API response
+
+        .. code-block:: python
+
+            {
+                "mins": 5,
+                "price": "9.35751834"
+            }
+"""
+        return self._get('avgPrice',
+                         data=params,
+                         version=self.PRIVATE_API_VERSION)
+
     def get_ticker(self, **params):
         """24 hour price change statistics.
 
@@ -1098,6 +1139,9 @@ class Client(object):
         :type timeInForce: str
         :param quantity: required
         :type quantity: decimal
+        :param quoteOrderQty: amount the user wants to spend (when buying) or receive (when selling)
+            of the quote asset, applicable to MARKET orders
+        :type quoteOrderQty: decimal
         :param price: required
         :type price: str
         :param newClientOrderId: A unique id for the order. Automatically generated if not sent.
@@ -1309,6 +1353,9 @@ class Client(object):
         :type side: str
         :param quantity: required
         :type quantity: decimal
+        :param quoteOrderQty: amount the user wants to spend (when buying) or receive (when selling)
+            of the quote asset
+        :type quoteOrderQty: decimal
         :param newClientOrderId: A unique id for the order. Automatically generated if not sent.
         :type newClientOrderId: str
         :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
@@ -1333,6 +1380,8 @@ class Client(object):
         :type symbol: str
         :param quantity: required
         :type quantity: decimal
+        :param quoteOrderQty: the amount the user wants to spend of the quote asset
+        :type quoteOrderQty: decimal
         :param newClientOrderId: A unique id for the order. Automatically generated if not sent.
         :type newClientOrderId: str
         :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
@@ -1357,6 +1406,8 @@ class Client(object):
         :type symbol: str
         :param quantity: required
         :type quantity: decimal
+        :param quoteOrderQty: the amount the user wants to receive of the quote asset
+        :type quoteOrderQty: decimal
         :param newClientOrderId: A unique id for the order. Automatically generated if not sent.
         :type newClientOrderId: str
         :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
@@ -1373,6 +1424,148 @@ class Client(object):
         """
         params.update({'side': self.SIDE_SELL})
         return self.order_market(**params)
+
+    def create_oco_order(self, **params):
+        """Send in a new OCO order
+
+        https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#new-oco-trade
+
+        :param symbol: required
+        :type symbol: str
+        :param listClientOrderId: A unique id for the list order. Automatically generated if not sent.
+        :type listClientOrderId: str
+        :param side: required
+        :type side: str
+        :param quantity: required
+        :type quantity: decimal
+        :param limitClientOrderId: A unique id for the limit order. Automatically generated if not sent.
+        :type limitClientOrderId: str
+        :param price: required
+        :type price: str
+        :param limitIcebergQty: Used to make the LIMIT_MAKER leg an iceberg order.
+        :type limitIcebergQty: decimal
+        :param stopClientOrderId: A unique id for the stop order. Automatically generated if not sent.
+        :type stopClientOrderId: str
+        :param stopPrice: required
+        :type stopPrice: str
+        :param stopLimitPrice: If provided, stopLimitTimeInForce is required.
+        :type stopLimitPrice: str
+        :param stopIcebergQty: Used with STOP_LOSS_LIMIT leg to make an iceberg order.
+        :type stopIcebergQty: decimal
+        :param stopLimitTimeInForce: Valid values are GTC/FOK/IOC.
+        :type stopLimitTimeInForce: str
+        :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
+        :type newOrderRespType: str
+        :param recvWindow: the number of milliseconds the request is valid for
+        :type recvWindow: int
+
+        :returns: API response
+
+        Response ACK:
+
+        .. code-block:: python
+
+            {
+            }
+
+        Response RESULT:
+
+        .. code-block:: python
+
+            {
+            }
+
+        Response FULL:
+
+        .. code-block:: python
+
+            {
+            }
+
+        :raises: BinanceRequestException, BinanceAPIException, BinanceOrderException, BinanceOrderMinAmountException, BinanceOrderMinPriceException, BinanceOrderMinTotalException, BinanceOrderUnknownSymbolException, BinanceOrderInactiveSymbolException
+
+        """
+        return self._post('order/oco', True, data=params)
+
+    def order_oco_buy(self, **params):
+        """Send in a new OCO buy order
+
+        :param symbol: required
+        :type symbol: str
+        :param listClientOrderId: A unique id for the list order. Automatically generated if not sent.
+        :type listClientOrderId: str
+        :param quantity: required
+        :type quantity: decimal
+        :param limitClientOrderId: A unique id for the limit order. Automatically generated if not sent.
+        :type limitClientOrderId: str
+        :param price: required
+        :type price: str
+        :param limitIcebergQty: Used to make the LIMIT_MAKER leg an iceberg order.
+        :type limitIcebergQty: decimal
+        :param stopClientOrderId: A unique id for the stop order. Automatically generated if not sent.
+        :type stopClientOrderId: str
+        :param stopPrice: required
+        :type stopPrice: str
+        :param stopLimitPrice: If provided, stopLimitTimeInForce is required.
+        :type stopLimitPrice: str
+        :param stopIcebergQty: Used with STOP_LOSS_LIMIT leg to make an iceberg order.
+        :type stopIcebergQty: decimal
+        :param stopLimitTimeInForce: Valid values are GTC/FOK/IOC.
+        :type stopLimitTimeInForce: str
+        :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
+        :type newOrderRespType: str
+        :param recvWindow: the number of milliseconds the request is valid for
+        :type recvWindow: int
+
+        :returns: API response
+
+        See OCO order endpoint for full response options
+
+        :raises: BinanceRequestException, BinanceAPIException, BinanceOrderException, BinanceOrderMinAmountException, BinanceOrderMinPriceException, BinanceOrderMinTotalException, BinanceOrderUnknownSymbolException, BinanceOrderInactiveSymbolException
+
+        """
+        params.update({'side': self.SIDE_BUY})
+        return self.create_oco_order(**params)
+
+    def order_oco_sell(self, **params):
+        """Send in a new OCO sell order
+
+        :param symbol: required
+        :type symbol: str
+        :param listClientOrderId: A unique id for the list order. Automatically generated if not sent.
+        :type listClientOrderId: str
+        :param quantity: required
+        :type quantity: decimal
+        :param limitClientOrderId: A unique id for the limit order. Automatically generated if not sent.
+        :type limitClientOrderId: str
+        :param price: required
+        :type price: str
+        :param limitIcebergQty: Used to make the LIMIT_MAKER leg an iceberg order.
+        :type limitIcebergQty: decimal
+        :param stopClientOrderId: A unique id for the stop order. Automatically generated if not sent.
+        :type stopClientOrderId: str
+        :param stopPrice: required
+        :type stopPrice: str
+        :param stopLimitPrice: If provided, stopLimitTimeInForce is required.
+        :type stopLimitPrice: str
+        :param stopIcebergQty: Used with STOP_LOSS_LIMIT leg to make an iceberg order.
+        :type stopIcebergQty: decimal
+        :param stopLimitTimeInForce: Valid values are GTC/FOK/IOC.
+        :type stopLimitTimeInForce: str
+        :param newOrderRespType: Set the response JSON. ACK, RESULT, or FULL; default: RESULT.
+        :type newOrderRespType: str
+        :param recvWindow: the number of milliseconds the request is valid for
+        :type recvWindow: int
+
+        :returns: API response
+
+        See OCO order endpoint for full response options
+
+        :raises: BinanceRequestException, BinanceAPIException, BinanceOrderException, BinanceOrderMinAmountException, BinanceOrderMinPriceException, BinanceOrderMinTotalException, BinanceOrderUnknownSymbolException, BinanceOrderInactiveSymbolException
+
+        """
+        params.update({'side': self.SIDE_SELL})
+        return self.create_oco_order(**params)
 
     def create_test_order(self, **params):
         """Test new order creation and signature/recvWindow long. Creates and validates a new order but does not send it into the matching engine.
@@ -3086,6 +3279,118 @@ class Client(object):
                                         signed=True,
                                         data=params)
 
+    # Lending Endpoints
+
+    def get_lending_product_list(self, **params):
+        """Get Lending Product List
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-flexible-product-list-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/daily/product/list ',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_daily_quota_left(self, **params):
+        """Get Left Daily Purchase Quota of Flexible Product.
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-left-daily-purchase-quota-of-flexible-product-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/daily/userLeftQuota',
+                                        signed=True,
+                                        data=params)
+
+    def purchase_lending_product(self, **params):
+        """Purchase Flexible Product
+
+        https://binance-docs.github.io/apidocs/spot/en/#purchase-flexible-product-user_data
+
+        """
+        return self._request_margin_api('post',
+                                        'lending/daily/purchase',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_daily_redemption_quota(self, **params):
+        """Get Left Daily Redemption Quota of Flexible Product
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-left-daily-redemption-quota-of-flexible-product-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/daily/userRedemptionQuota',
+                                        signed=True,
+                                        data=params)
+
+    def redeem_lending_product(self, **params):
+        """Redeem Flexible Product
+
+        https://binance-docs.github.io/apidocs/spot/en/#redeem-flexible-product-user_data
+
+        """
+        return self._request_margin_api('post',
+                                        'lending/daily/redeem',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_position(self, **params):
+        """Get Flexible Product Position
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-flexible-product-position-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/daily/token/position',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_account(self, **params):
+        """Get Lending Account Details
+
+        https://binance-docs.github.io/apidocs/spot/en/#lending-account-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/union/account',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_purchase_history(self, **params):
+        """Get Lending Purchase History
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-purchase-record-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/union/purchaseRecord',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_redemption_history(self, **params):
+        """Get Lending Redemption History
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-redemption-record-user_data
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/union/redemptionRecord',
+                                        signed=True,
+                                        data=params)
+
+    def get_lending_interest_history(self, **params):
+        """Get Lending Interest History
+
+        https://binance-docs.github.io/apidocs/spot/en/#get-interest-history-user_data-2
+
+        """
+        return self._request_margin_api('get',
+                                        'lending/union/interestHistory',
+                                        signed=True,
+                                        data=params)
+
     # Sub Accounts
 
     def get_sub_account_list(self, **params):
@@ -3131,7 +3436,6 @@ class Client(object):
                     }
                 ]
             }
-
 
         :raises: BinanceRequestException, BinanceAPIException
 
